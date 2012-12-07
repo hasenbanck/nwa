@@ -102,7 +102,7 @@ func (d *NwaData) ReadHeader() error {
 
 func (d *NwaData) CheckHeader() error {
 	if d.complevel != -1 && d.offsets == nil {
-		return nil
+		return errors.New("No offsets set even thought they are needed")
 	}
 	if d.channels != 1 && d.channels != 2 {
 		return fmt.Errorf("This library only supports mono / stereo data: data has %d channels\n", d.channels)
@@ -120,10 +120,8 @@ func (d *NwaData) CheckHeader() error {
 		}
 		return nil
 	}
-	// TODO: complevel > 5????
-	// if (complevel < 0 || complevel > 2) {
 	if d.complevel < 0 || d.complevel > 5 {
-		return fmt.Errorf("This library supports only compression level -1,0,1,2: the compression level of the data is %d\n", d.complevel)
+		return fmt.Errorf("This library supports only compression level from -1 to 5: the compression level of the data is %d\n", d.complevel)
 	}
 
 	// TODO: If we NEED the filesize, check it here!
