@@ -29,21 +29,21 @@ func (c *NwaFileContainer) getBits(bits uint8) uint8 {
 	return c.ret & ((1 << bits) - 1) // mask
 }
 
-func makeWavHeader(size int32, channels int16, bps int16, freq int32) io.Reader {
-	var byps int16 = (bps + 7) >> 3
+func makeWavHeader(size int, channels int, bps int, freq int) io.Reader {
+	var byps int16 = (int16(bps) + 7) >> 3
 	wavheader := new(bytes.Buffer)
 	binary.Write(wavheader, binary.LittleEndian, [...]byte{'R', 'I', 'F', 'F'})
-	binary.Write(wavheader, binary.LittleEndian, size+0x24)
+	binary.Write(wavheader, binary.LittleEndian, int32(size)+0x24)
 	binary.Write(wavheader, binary.LittleEndian, [...]byte{'W', 'A', 'V', 'E'})
 	binary.Write(wavheader, binary.LittleEndian, [...]byte{'f', 'm', 't', ' '})
 	binary.Write(wavheader, binary.LittleEndian, [...]byte{16, 0, 0, 0})
 	binary.Write(wavheader, binary.LittleEndian, [...]byte{1, 0})
-	binary.Write(wavheader, binary.LittleEndian, channels)
-	binary.Write(wavheader, binary.LittleEndian, freq)
-	binary.Write(wavheader, binary.LittleEndian, freq*(int32)(byps)*(int32)(channels))
-	binary.Write(wavheader, binary.LittleEndian, byps*channels)
-	binary.Write(wavheader, binary.LittleEndian, bps)
+	binary.Write(wavheader, binary.LittleEndian, int16(channels))
+	binary.Write(wavheader, binary.LittleEndian, int32(freq))
+	binary.Write(wavheader, binary.LittleEndian, int32(byps)*int32(freq*channels))
+	binary.Write(wavheader, binary.LittleEndian, byps*int16(channels))
+	binary.Write(wavheader, binary.LittleEndian, int16(bps))
 	binary.Write(wavheader, binary.LittleEndian, [...]byte{'d', 'a', 't', 'a'})
-	binary.Write(wavheader, binary.LittleEndian, size)
+	binary.Write(wavheader, binary.LittleEndian, int32(size))
 	return wavheader
 }
