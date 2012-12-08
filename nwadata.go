@@ -24,7 +24,6 @@ type NwaData struct {
 	dummy2        int32     // ? : 0x89
 	curblock      int
 	offsets       []int32
-	filesize      int // TODO: Do we need this?
 	tmpdata       []byte
 }
 
@@ -64,7 +63,6 @@ func (d *NwaData) ReadHeader() error {
 		// 適当に決め打ちする
 		d.blocksize = 65536
 		d.restsize = (d.datasize % (d.blocksize * (int32)(d.bps/8))) / (int32)(d.bps/8)
-		// Todo: Can we make the following 3 lines better to read?
 		var rest int32
 		if d.restsize > 0 {
 			rest = 1
@@ -75,9 +73,6 @@ func (d *NwaData) ReadHeader() error {
 		// １時間を超える曲ってのはないでしょ
 		return fmt.Errorf("Blocks are too large: %d\n", d.blocks)
 	}
-
-	// TODO: Do we need the filesize? io.Reader doesn't provide such a thing
-
 	if d.complevel == -1 {
 		return nil
 	}
@@ -123,9 +118,6 @@ func (d *NwaData) CheckHeader() error {
 	if d.complevel < 0 || d.complevel > 5 {
 		return fmt.Errorf("This library supports only compression level from -1 to 5: the compression level of the data is %d\n", d.complevel)
 	}
-
-	// TODO: If we NEED the filesize, check it here!
-
 	if d.offsets[d.blocks-1] >= d.compdatasize {
 		return fmt.Errorf("The last offset overruns the file.\n")
 	}
