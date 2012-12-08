@@ -3,38 +3,37 @@
 package nwa
 
 import (
+	"bytes"
 	"io"
 )
 
 // Decode returns the dencoded sound as a slice in WAVE format.
-func DecodeAsWav(r io.Reader) ([]byte, error) {
-	data, err := NewNwaData(r)
-	if err = data.ReadHeader(); err != nil {
+func DecodeAsWav(r io.ReadSeeker) (io.Reader, error) {
+	nwadata, err := NewNwaData(r)
+	if err != nil {
 		return nil, err
 	}
-	if err = data.CheckHeader(); err != nil {
+	if err = nwadata.ReadHeader(); err != nil {
 		return nil, err
 	}
-	//var bs int
-	//if bs, err = d.BlockLength(); err != nil {return nil, err}
-	/**
-	data := make([]byte, bs)
-	while( (read, err = h.Decode(data, skip_count)); read != 0) {
-		if (err != nil) {
+	if err = nwadata.CheckHeader(); err != nil {
+		return nil, err
+	}
+
+	var ret int64 = -1
+	data := new(bytes.Buffer)
+	for ret != 0 {
+		ret = nwadata.Decode(data, 0)
+		if ret == -1 {
 			break
-		} else {
-			continue
 		}
 	}
 	return data, nil
-	**/
-
-	return nil, nil
 }
 
 // DecoeKoeAsWav returns the decoded sound at the given offset/length
 // from a KOE file as a slice in WAVE format.
-func DecodeKoeAsWav(r io.Reader, offset int, length int) ([]byte, error) {
+func DecodeKoeAsWav(r io.ReadSeeker, offset int, length int) ([]byte, error) {
 	// TODO: Could be NWA or VORBIS!
 	return nil, nil
 }
