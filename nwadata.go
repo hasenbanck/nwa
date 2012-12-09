@@ -77,7 +77,7 @@ func (nd *NwaData) ReadHeader() error {
 	if nd.complevel == -1 {
 		nd.blocksize = 65536
 		nd.restsize = (nd.datasize % (nd.blocksize * (nd.bps / 8))) / (nd.bps / 8)
-		var rest int
+		var rest int = 0
 		if nd.restsize > 0 {
 			rest = 1
 		}
@@ -101,10 +101,10 @@ func (nd *NwaData) ReadHeader() error {
 		}
 		return err
 	}
-
-	var i int
-	for i = 0; i < nd.blocks; i++ {
-		binary.Read(buffer, binary.LittleEndian, &nd.offsets[i])
+	for i := 0; i < nd.blocks; i++ {
+		var tmp int32
+		binary.Read(buffer, binary.LittleEndian, &tmp)
+		nd.offsets[i] = int(tmp)
 	}
 	return nil
 }
@@ -220,8 +220,8 @@ func (nd *NwaData) Decode(writer io.Writer) int64 {
 }
 
 func (nd *NwaData) decodeBlock(outsize int) {
-	var d [2]int
-	var flipflag, runlength, written int = 0, 0, 0
+	d := [...]int{0, 0}
+	var flipflag, runlength int = 0, 0
 
 	// Read the first data (with full accuracy)
 	if nd.bps == 8 {
@@ -229,7 +229,9 @@ func (nd *NwaData) decodeBlock(outsize int) {
 		binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
 		d[0] = int(tmp)
 	} else { // bps == 16bit
-		binary.Read(&nd.tmpdata, binary.LittleEndian, &d[0])
+		var tmp int16
+		binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
+		d[0] = int(tmp)
 	}
 	// Stereo
 	if nd.channels == 2 {
@@ -238,12 +240,15 @@ func (nd *NwaData) decodeBlock(outsize int) {
 			binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
 			d[1] = int(tmp)
 		} else { // bps == 16bit
-			binary.Read(&nd.tmpdata, binary.LittleEndian, &d[1])
+			var tmp int16
+			binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
+			d[1] = int(tmp)
 		}
 	}
 
 	br := newBitReader(&nd.tmpdata)
-	for written < outsize {
+	dsize := outsize / (nd.bps / 8)
+	for i := 0; i < dsize; i++ {
 		// If we are not in a copy loop (RLE), read in the data
 		if runlength == 0 {
 			mantissa := br.ReadBits(3)
@@ -313,10 +318,8 @@ func (nd *NwaData) decodeBlock(outsize int) {
 		}
 		if nd.bps == 8 {
 			binary.Write(nd.writer, binary.LittleEndian, int8(d[flipflag]))
-			written += 1
 		} else {
 			binary.Write(nd.writer, binary.LittleEndian, int16(d[flipflag]))
-			written += 2
 		}
 		if nd.channels == 2 {
 			// changing the channel
