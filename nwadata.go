@@ -251,10 +251,10 @@ func (nd *NwaData) decodeBlock(outsize int) {
 	for i := 0; i < dsize; i++ {
 		// If we are not in a copy loop (RLE), read in the data
 		if runlength == 0 {
-			mantissa := br.ReadBits(3)
+			exponent := br.ReadBits(3)
 			// Branching according to the mantissa: 0, 1-6, 7
 			switch {
-			case mantissa == 7:
+			case exponent == 7:
 				{
 					// 7: big exponent
 					// In case we are using RLE (complevel==5) this is disabled
@@ -279,16 +279,16 @@ func (nd *NwaData) decodeBlock(outsize int) {
 						}
 					}
 				}
-			case mantissa != 0:
+			case exponent != 0:
 				{
 					// 1-6 : normal differencial
 					var bits, shift uint
 					if nd.complevel >= 3 {
 						bits = uint(nd.complevel) + 3
-						shift = 1 + mantissa
+						shift = 1 + exponent
 					} else {
 						bits = 5 - uint(nd.complevel)
-						shift = 2 + mantissa + uint(nd.complevel)
+						shift = 2 + exponent + uint(nd.complevel)
 					}
 					mask1 := uint(1 << (bits - 1))
 					mask2 := uint((1 << (bits - 1)) - 1)
@@ -299,7 +299,7 @@ func (nd *NwaData) decodeBlock(outsize int) {
 						d[flipflag] += int((b & mask2) << shift)
 					}
 				}
-			case mantissa == 0:
+			case exponent == 0:
 				{
 					// Skips when not using RLE
 					if nd.userunlength == 1 {
