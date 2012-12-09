@@ -1,0 +1,119 @@
+/****************************************************************************
+**
+** NWA file format
+**
+** Translated from the original japanese version
+** of Kazunori "jagarl" Ueno <jagarl@creator.club.ne.jp>
+**
+*****************************************************************************
+**		File overview:
+**		NWA header
+**		data offset index
+**		data block<0>
+**		data block<1>
+**		...
+**		data blockn<n-1>
+**		data blockn<n>
+**
+**	NWA header:
+**		44 bytes (0x2c) in size.
+**		Since there is no magic number, you need to check the whole
+**		data integrity of the header to be sure that it's a NWA file.
+**		The data is little endian alligned.
+**
+**		0x00 int16   channel number (1 or 2)
+**		0x02 int16   bits per sample (16bit)
+**		0x04 int32   frequency (data per second)
+**		0x08 int32   compression: -1 = uncompressed, 0 to 5  = compressed
+**		0x0c int32   ?
+**		0x10 int32   block count
+**		0x14 int32   decompressed data size (bytes)
+**		0x18 int32   compressed data size (size of the NWA file in bytes)
+**		0x1c int32   sample count after decompression
+**		0x20 int32   block size of the decompressed samples
+**		0x24 int32   block size of the last decompressed sample
+**		0x28 int32   ?
+**
+**	data offset index:
+**		offset count   (int32)
+**		offset<0>      (int32)
+**		...
+**		offset<n-1>   (int32)
+**		offset<n>     (int32)
+**
+**		An offset points to the beginning of a data block (from file start).
+**
+**	data block:
+**		Variable length. Decompressed to a pre defined size.
+**		The data is in a DPCM format. The original PCM data a, b, c is changed
+**		to (a),b-a, c-b, whereas the mantissa is 3-5bit and the exponent 3bit.
+**		As a result the 16 bit data is transformed in the best case into
+**		6-8 bit data.
+**		The number of bits in the mantissa is at compression level 0 5bit and
+**		at compression level 2 3bit.
+**		Below, we will talk about the level 2 compression.
+**		mono：
+**			+00 int16  first data in the block
+**			+02- bit stream
+**		stereo：
+**			+00 int16  first data in the block for the left (?) channel
+**			+02 int16  first data in the block for the right (?) channel
+**			+04- bit stream
+**
+**		To counter the inaccuracy of the differencial data, the start of a
+**		block contains a correct data block (16bit).
+**
+**	bit stream:
+**		little endian
+**		+0 - +2 : mantissa
+**		+3 - +5 : exponent
+**
+**		Example: If there is 8 bit PCM data (one channel) called a b c,
+**		a&0x07: exponent of a
+**		(a>>3)&0x07: the mantissa of a (signed);
+**		((b<<2)|(a>>6))&0x07: exponent of b
+**		(b>>1)&0x07 : mantissa of b (signed);
+**		etc.
+**
+**		But the bit count of the mantissa could change according
+**		to the value of the exponent.
+**		exponent = 1 - 6:
+**			a=exonent、b=mantissa、p=the previous data, now data d
+**			The 2nd bit of b are high:
+**				d = p - (b&3)<<(4+a)
+**			The 2nd bit of b are not high:
+**				d = p + (b&3)<<(4+a)
+**		epponent = 0: The mantissa does not exists (data becomes 3bit)
+**			d = p
+**			The voice files for "Tomoyo after~" (complevel == 5) are using
+**			run-length encoding (RLE) in this case.
+**		exponent = 7:
+**			The next bit is high:
+**				d = 0 (currently unused)
+**				(data becomes 4bit)
+**			The next bit is not high：
+**				complevel = 0,1,2:
+**				   mantissa b = 6bit
+**				   The 5th bit of b is high:
+**						d = p - (b&0x1f)<<(4+7)
+**				   Is not high:
+**						d = p + (b&0x1f)<<(4+7)
+**				   (data becomes 10bit)
+**				complevel = 3,4,5:
+**				   mantissa b = 8bit
+**				   The 7th bit of b is high:
+**						d = p - (b&0x7f)<<9
+**				   Is not high:
+**						d = p + (b&0x1f)<<9
+**				   (data becomes 10bit)
+**
+**		If the compression level is different (compression level == 0):
+**			exponent==1~6 and the most significant bit of d is high:
+**				d = p - (b&0x0f)<<(2+a)
+**			exponent==7 and the most significant bit of d is high:
+**				d = p - (b&0x7f)<<(2+7)
+**				(b is 8 bit and the data becomes 12bit)
+**		only the precision is changed.
+**
+*****************************************************************************
+*/
