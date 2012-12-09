@@ -4,6 +4,7 @@ package nwa
 
 import (
 	"bytes"
+	"errors"
 	"io"
 )
 
@@ -22,10 +23,11 @@ func DecodeAsWav(r io.Reader) (io.Reader, error) {
 
 	var ret int64 = -1
 	data := new(bytes.Buffer)
+	// TODO: Rewrite me more golike!
 	for ret != 0 {
 		ret = nwadata.Decode(data)
 		if ret == -1 {
-			break
+			return nil, errors.New("This shouldn't happen! Report me!")
 		}
 	}
 	return data, nil

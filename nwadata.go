@@ -25,6 +25,7 @@ type NwaData struct {
 	offsets      []int
 
 	tmpdata bytes.Buffer
+	writer  io.Writer
 }
 
 func NewNwaData(r io.Reader) (*NwaData, error) {
@@ -159,17 +160,19 @@ func (nd *NwaData) BlockLength() (int, error) {
 ** エラー時は -1
  */
 func (nd *NwaData) Decode(writer io.Writer) int64 {
+	nd.writer = writer
+
 	// Uncompressed wave data stream
 	if nd.complevel == -1 {
 		if nd.curblock == -1 {
 			// If it's the first block we have to write the wave header
-			written, _ := io.Copy(writer, makeWavHeader(nd.datasize, nd.channels, nd.bps, nd.freq))
+			written, _ := io.Copy(nd.writer, makeWavHeader(nd.datasize, nd.channels, nd.bps, nd.freq))
 			nd.curblock++
 			return written
 		}
 		if nd.curblock < nd.blocks {
 			nd.curblock++
-			ret, err := io.CopyN(writer, nd.reader, (int64)(nd.blocksize*(nd.bps/8)))
+			ret, err := io.CopyN(nd.writer, nd.reader, (int64)(nd.blocksize*(nd.bps/8)))
 			if err != nil {
 				return -1
 			}
@@ -187,7 +190,7 @@ func (nd *NwaData) Decode(writer io.Writer) int64 {
 	}
 	if nd.curblock == -1 {
 		// If it's the first block we have to write the wave header
-		written, _ := io.Copy(writer, makeWavHeader(nd.datasize, nd.channels, nd.bps, nd.freq))
+		written, _ := io.Copy(nd.writer, makeWavHeader(nd.datasize, nd.channels, nd.bps, nd.freq))
 		nd.curblock++
 		return written
 	}
@@ -210,15 +213,15 @@ func (nd *NwaData) Decode(writer io.Writer) int64 {
 	io.CopyN(&nd.tmpdata, nd.reader, (int64)(curcompsize))
 
 	// Decode the block
-	nd.decodeBlock(writer)
+	nd.decodeBlock(curblocksize)
 
 	nd.curblock++
 	return (int64)(curblocksize)
 }
 
-func (nd *NwaData) decodeBlock(writer io.Writer) {
+func (nd *NwaData) decodeBlock(outsize int) {
 	var d [2]int
-	var flipflag, runlength int = 0, 0
+	var flipflag, runlength, written int = 0, 0, 0
 
 	// Read the first data (with full accuracy)
 	if nd.bps == 8 {
@@ -240,11 +243,7 @@ func (nd *NwaData) decodeBlock(writer io.Writer) {
 	}
 
 	br := newBitReader(&nd.tmpdata)
-	for true {
-		if br.CheckError() != nil {
-			break
-		}
-
+	for written < outsize {
 		// If we are not in a copy loop (RLE), read in the data
 		if runlength == 0 {
 			mantissa := br.ReadBits(3)
@@ -313,18 +312,11 @@ func (nd *NwaData) decodeBlock(writer io.Writer) {
 			runlength--
 		}
 		if nd.bps == 8 {
-			if br.CheckError() != nil {
-				break
-			}
-			// TODO write into the writer 8bit!
-			// *outdata++ = d[flipflag]
+			binary.Write(nd.writer, binary.LittleEndian, int8(d[flipflag]))
+			written += 1
 		} else {
-			if br.CheckError() != nil {
-				break
-			}
-			// TODO write into the writer 16bit!
-			//write_little_endian_short(outdata, d[flipflag])
-			//outdata += 2
+			binary.Write(nd.writer, binary.LittleEndian, int16(d[flipflag]))
+			written += 2
 		}
 		if nd.channels == 2 {
 			// changing the channel
