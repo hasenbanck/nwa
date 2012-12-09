@@ -9,34 +9,35 @@ import (
 )
 
 type NwaData struct {
-	reader       io.ReadSeeker // Reader to read the NWA data from
-	channels     int           // channels
-	bps          int           // bits per sample
-	freq         int           // samples per second
-	complevel    int           // compression level
-	userunlength int           // run length encoding
-	blocks       int           // block count
-	datasize     int           // all data size
-	compdatasize int           // compressed data size
-	samplecount  int           // all samples
-	blocksize    int           // samples per block
-	restsize     int           // samples of the last block
+	reader       io.Reader // Reader to read the NWA data from
+	channels     int       // channels
+	bps          int       // bits per sample
+	freq         int       // samples per second
+	complevel    int       // compression level
+	userunlength int       // run length encoding
+	blocks       int       // block count
+	datasize     int       // all data size
+	compdatasize int       // compressed data size
+	samplecount  int       // all samples
+	blocksize    int       // samples per block
+	restsize     int       // samples of the last block
 	curblock     int
 	offsets      []int
-	tmpdata      bytes.Buffer
+
+	tmpdata bytes.Buffer
 }
 
-func NewNwaData(r io.ReadSeeker) (*NwaData, error) {
+func NewNwaData(r io.Reader) (*NwaData, error) {
 	if r == nil {
 		return nil, errors.New("Reader is nil.")
 	}
 	return &NwaData{reader: r}, nil
 }
 
-func (d *NwaData) ReadHeader() error {
-	d.curblock = -1
+func (nd *NwaData) ReadHeader() error {
+	nd.curblock = -1
 	buffer := new(bytes.Buffer)
-	if count, err := io.CopyN(buffer, d.reader, 0x2c); count != 0x2c || err != nil {
+	if count, err := io.CopyN(buffer, nd.reader, 0x2c); count != 0x2c || err != nil {
 		if err == nil {
 			err = fmt.Errorf("Can't read the header. Read 0x%X bytes\n", count)
 		}
@@ -59,42 +60,41 @@ func (d *NwaData) ReadHeader() error {
 	binary.Read(buffer, binary.LittleEndian, &restsize)
 	binary.Read(buffer, binary.LittleEndian, &dummy)
 
-	d.channels = int(channels)
-	d.bps = int(bps)
-	d.freq = int(freq)
-	d.complevel = int(complevel)
-	d.userunlength = int(userunlength)
-	d.blocks = int(blocks)
-	d.datasize = int(datasize)
-	d.compdatasize = int(compdatasize)
-	d.samplecount = int(samplecount)
-	d.blocksize = int(blocksize)
-	d.restsize = int(restsize)
+	nd.channels = int(channels)
+	nd.bps = int(bps)
+	nd.freq = int(freq)
+	nd.complevel = int(complevel)
+	nd.userunlength = int(userunlength)
+	nd.blocks = int(blocks)
+	nd.datasize = int(datasize)
+	nd.compdatasize = int(compdatasize)
+	nd.samplecount = int(samplecount)
+	nd.blocksize = int(blocksize)
+	nd.restsize = int(restsize)
 
-	if d.complevel == -1 { // 無圧縮rawデータ
-		// 適当に決め打ちする
-		d.blocksize = 65536
-		d.restsize = (d.datasize % (d.blocksize * (d.bps / 8))) / (d.bps / 8)
+	// uncompressed wave
+	if nd.complevel == -1 {
+		nd.blocksize = 65536
+		nd.restsize = (nd.datasize % (nd.blocksize * (nd.bps / 8))) / (nd.bps / 8)
 		var rest int
-		if d.restsize > 0 {
+		if nd.restsize > 0 {
 			rest = 1
 		}
-		d.blocks = d.datasize/(d.blocksize*(d.bps/8)) + rest
+		nd.blocks = nd.datasize/(nd.blocksize*(nd.bps/8)) + rest
 	}
-	if d.blocks <= 0 || d.blocks > 1000000 {
-		// １時間を超える曲ってのはないでしょ
-		return fmt.Errorf("Blocks are too large: %d\n", d.blocks)
+	if nd.blocks <= 0 || nd.blocks > 1000000 {
+		// There can't be a music file over 1 hr
+		return fmt.Errorf("Blocks are too large: %d\n", nd.blocks)
 	}
-	if d.complevel == -1 {
+	if nd.complevel == -1 {
 		return nil
 	}
 
 	// Read the offset indexes
-	// TODO: Test me!
-	d.offsets = make([]int, d.blocks)
+	nd.offsets = make([]int, nd.blocks)
 	buffer = new(bytes.Buffer)
-	offsetsize := int64(d.blocks * 4)
-	if count, err := io.CopyN(buffer, d.reader, offsetsize); count != offsetsize || err != nil {
+	offsetsize := int64(nd.blocks * 4)
+	if count, err := io.CopyN(buffer, nd.reader, offsetsize); count != offsetsize || err != nil {
 		if err == nil {
 			err = fmt.Errorf("Can't read the offset block. Read %X bytes", count)
 		}
@@ -102,55 +102,55 @@ func (d *NwaData) ReadHeader() error {
 	}
 
 	var i int
-	for i = 0; i < d.blocks; i++ {
-		binary.Read(buffer, binary.LittleEndian, &d.offsets[i])
+	for i = 0; i < nd.blocks; i++ {
+		binary.Read(buffer, binary.LittleEndian, &nd.offsets[i])
 	}
 	return nil
 }
 
-func (d *NwaData) CheckHeader() error {
-	if d.complevel != -1 && d.offsets == nil {
+func (nd *NwaData) CheckHeader() error {
+	if nd.complevel != -1 && nd.offsets == nil {
 		return errors.New("No offsets set even thought they are needed")
 	}
-	if d.channels != 1 && d.channels != 2 {
-		return fmt.Errorf("This library only supports mono / stereo data: data has %d channels\n", d.channels)
+	if nd.channels != 1 && nd.channels != 2 {
+		return fmt.Errorf("This library only supports mono / stereo data: data has %d channels\n", nd.channels)
 	}
-	if d.bps != 8 && d.bps != 16 {
-		return fmt.Errorf("This library only supports 8 / 16bit data: data is %d bits\n", d.bps)
+	if nd.bps != 8 && nd.bps != 16 {
+		return fmt.Errorf("This library only supports 8 / 16bit data: data is %d bits\n", nd.bps)
 	}
-	if d.complevel == -1 {
-		var byps int = d.bps / 8 // bytes per sample
-		if d.datasize != d.samplecount*byps {
-			return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", d.datasize, d.samplecount, byps)
+	if nd.complevel == -1 {
+		var byps int = nd.bps / 8 // bytes per sample
+		if nd.datasize != nd.samplecount*byps {
+			return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nd.datasize, nd.samplecount, byps)
 		}
-		if d.samplecount != (d.blocks-1)*d.blocksize+d.restsize {
-			return fmt.Errorf("Total sample count is invalid: samplecount %d != %d*%d+%d(block*blocksize+lastblocksize)\n", d.samplecount, d.blocks-1, d.blocksize, d.restsize)
+		if nd.samplecount != (nd.blocks-1)*nd.blocksize+nd.restsize {
+			return fmt.Errorf("Total sample count is invalid: samplecount %d != %d*%d+%d(block*blocksize+lastblocksize)\n", nd.samplecount, nd.blocks-1, nd.blocksize, nd.restsize)
 		}
 		return nil
 	}
-	if d.complevel < 0 || d.complevel > 5 {
-		return fmt.Errorf("This library supports only compression level from -1 to 5: the compression level of the data is %d\n", d.complevel)
+	if nd.complevel < 0 || nd.complevel > 5 {
+		return fmt.Errorf("This library supports only compression level from -1 to 5: the compression level of the data is %d\n", nd.complevel)
 	}
-	if d.offsets[d.blocks-1] >= d.compdatasize {
+	if nd.offsets[nd.blocks-1] >= nd.compdatasize {
 		return fmt.Errorf("The last offset overruns the file.\n")
 	}
-	var byps int = d.bps / 8 // bytes per sample
-	if d.datasize != d.samplecount*byps {
-		return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", d.datasize, d.samplecount, byps)
+	var byps int = nd.bps / 8 // bytes per sample
+	if nd.datasize != nd.samplecount*byps {
+		return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nd.datasize, nd.samplecount, byps)
 	}
-	if d.samplecount != (d.blocks-1)*d.blocksize+d.restsize {
-		return fmt.Errorf("Total sample count is invalid: samplecount %d != %d*%d+%d(block*blocksize+lastblocksize).\n", d.samplecount, d.blocks-1, d.blocksize, d.restsize)
+	if nd.samplecount != (nd.blocks-1)*nd.blocksize+nd.restsize {
+		return fmt.Errorf("Total sample count is invalid: samplecount %d != %d*%d+%d(block*blocksize+lastblocksize).\n", nd.samplecount, nd.blocks-1, nd.blocksize, nd.restsize)
 	}
 	return nil
 }
 
-func (d *NwaData) BlockLength() (int, error) {
-	if d.complevel != -1 {
-		if d.offsets == nil {
+func (nd *NwaData) BlockLength() (int, error) {
+	if nd.complevel != -1 {
+		if nd.offsets == nil {
 			return 0, errors.New("BlockLength could not be calculcated: No offsets set!")
 		}
 	}
-	return d.blocksize * (d.bps / 8), nil
+	return nd.blocksize * (nd.bps / 8), nil
 }
 
 /*
@@ -158,34 +158,18 @@ func (d *NwaData) BlockLength() (int, error) {
 ** 返り値は作成したデータの長さ。終了時は 0。
 ** エラー時は -1
  */
-func (d *NwaData) Decode(data io.Writer, skipcount int) int64 {
+func (nd *NwaData) Decode(writer io.Writer) int64 {
 	// Uncompressed wave data stream
-	if d.complevel == -1 {
-		if d.curblock == -1 {
+	if nd.complevel == -1 {
+		if nd.curblock == -1 {
 			// If it's the first block we have to write the wave header
-			written, _ := io.Copy(data, makeWavHeader(d.datasize, d.channels, d.bps, d.freq))
-			d.curblock++
-			// TODO: We might need to seek to the offset+0x2c, not really sure right now
-			// Since we have allready read a header and should be in the data segment right
-			// now with the cursor
-			//d.reader.Seek(offset_start+0x2c)
+			written, _ := io.Copy(writer, makeWavHeader(nd.datasize, nd.channels, nd.bps, nd.freq))
+			nd.curblock++
 			return written
 		}
-		if skipcount > d.blocksize/d.channels {
-			skipcount -= d.blocksize / d.channels
-			d.reader.Seek((int64)(d.blocksize*(d.bps/8)), 1)
-			d.curblock++
-			return -2
-		}
-		if d.curblock < d.blocks {
-			readsize := d.blocksize
-			if skipcount != 0 {
-				d.reader.Seek((int64)(skipcount*d.channels*(d.bps/8)), 1)
-				readsize -= skipcount * d.channels
-				skipcount = 0
-			}
-			d.curblock++
-			ret, err := io.CopyN(data, d.reader, (int64)(readsize*(d.bps/8)))
+		if nd.curblock < nd.blocks {
+			nd.curblock++
+			ret, err := io.CopyN(writer, nd.reader, (int64)(nd.blocksize*(nd.bps/8)))
 			if err != nil {
 				return -1
 			}
@@ -195,56 +179,156 @@ func (d *NwaData) Decode(data io.Writer, skipcount int) int64 {
 	}
 
 	// Compressed (NWA) wave data stream
-	if d.offsets == nil {
+	if nd.offsets == nil {
 		return -1
 	}
-	if d.blocks == d.curblock {
+	if nd.blocks == nd.curblock {
 		return 0
 	}
-	if d.curblock == -1 {
+	if nd.curblock == -1 {
 		// If it's the first block we have to write the wave header
-		written, _ := io.Copy(data, makeWavHeader(d.datasize, d.channels, d.bps, d.freq))
-		d.curblock++
+		written, _ := io.Copy(writer, makeWavHeader(nd.datasize, nd.channels, nd.bps, nd.freq))
+		nd.curblock++
 		return written
 	}
 
 	// 今回読み込む／デコードするデータの大きさを得る
 	var curblocksize, curcompsize int
-	if d.curblock != d.blocks-1 {
-		curblocksize = d.blocksize * (d.bps / 8)
-		curcompsize = d.offsets[d.curblock+1] - d.offsets[d.curblock]
-		if curblocksize >= d.blocksize*(d.bps/8)*2 {
+	if nd.curblock != nd.blocks-1 {
+		curblocksize = nd.blocksize * (nd.bps / 8)
+		curcompsize = nd.offsets[nd.curblock+1] - nd.offsets[nd.curblock]
+		if curblocksize >= nd.blocksize*(nd.bps/8)*2 {
 			return -1
 		} // Fatal error
 	} else {
-		curblocksize = d.restsize * (d.bps / 8)
-		curcompsize = d.blocksize * (d.bps / 8) * 2
-	}
-	if skipcount > d.blocksize/d.channels {
-		skipcount -= d.blocksize / d.channels
-		d.reader.Seek((int64)(curcompsize), 1)
-		d.curblock++
-		return -2
+		curblocksize = nd.restsize * (nd.bps / 8)
+		curcompsize = nd.blocksize * (nd.bps / 8) * 2
 	}
 
-	// データ読み込み
-	d.tmpdata.Reset()
-	io.CopyN(&d.tmpdata, d.reader, (int64)(curcompsize))
+	// Read in the block data
+	nd.tmpdata.Reset()
+	io.CopyN(&nd.tmpdata, nd.reader, (int64)(curcompsize))
 
-	// 展開
-	//TODO: Implement me
-	//decodeData(d.tmpdata, d.reader, curcompsize, curblocksize)
-	fmt.Printf("Curblock: %d", d.curblock)
+	// Decode the block
+	nd.decodeBlock(writer)
 
-	retsize := curblocksize
-	if skipcount != 0 {
-		skip := skipcount * d.channels * (d.bps / 8)
-		retsize -= skip
-		// TODO: Why do we need this skipping?
-		// The next command worries me a little bit
-		//memmove(data, data+skipc, skip)
-		skipcount = 0
+	nd.curblock++
+	return (int64)(curblocksize)
+}
+
+func (nd *NwaData) decodeBlock(writer io.Writer) {
+	var d [2]int
+	var flipflag, runlength int = 0, 0
+
+	// Read the first data (with full accuracy)
+	if nd.bps == 8 {
+		var tmp int8
+		binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
+		d[0] = int(tmp)
+	} else { // bps == 16bit
+		binary.Read(&nd.tmpdata, binary.LittleEndian, &d[0])
 	}
-	d.curblock++
-	return (int64)(retsize)
+	// Stereo
+	if nd.channels == 2 {
+		if nd.bps == 8 {
+			var tmp int8
+			binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
+			d[1] = int(tmp)
+		} else { // bps == 16bit
+			binary.Read(&nd.tmpdata, binary.LittleEndian, &d[1])
+		}
+	}
+
+	br := newBitReader(&nd.tmpdata)
+	for true {
+		if br.CheckError() != nil {
+			break
+		}
+
+		// If we are not in a copy loop (RLE), read in the data
+		if runlength == 0 {
+			mantissa := br.ReadBits(3)
+			// Branching according to the mantissa: 0, 1-6, 7
+			switch {
+			case mantissa == 7:
+				{
+					// 7: big exponent
+					// In case we are using RLE (complevel==5) this is disabled
+					if br.ReadBits(1) == 1 {
+						d[flipflag] = 0
+					} else {
+						var bits, shift uint
+						if nd.complevel >= 3 {
+							bits = 8
+							shift = 9
+						} else {
+							bits = 8 - uint(nd.complevel)
+							shift = 2 + 7 + uint(nd.complevel)
+						}
+						mask1 := uint(1 << (bits - 1))
+						mask2 := uint((1 << (bits - 1)) - 1)
+						b := br.ReadBits(bits)
+						if b&mask1 == 1 {
+							d[flipflag] -= int((b & mask2) << shift)
+						} else {
+							d[flipflag] += int((b & mask2) << shift)
+						}
+					}
+				}
+			case mantissa != 0:
+				{
+					// 1-6 : normal differencial
+					var bits, shift uint
+					if nd.complevel >= 3 {
+						bits = uint(nd.complevel) + 3
+						shift = 1 + mantissa
+					} else {
+						bits = 5 - uint(nd.complevel)
+						shift = 2 + mantissa + uint(nd.complevel)
+					}
+					mask1 := uint(1 << (bits - 1))
+					mask2 := uint((1 << (bits - 1)) - 1)
+					b := br.ReadBits(bits)
+					if b&mask1 == 1 {
+						d[flipflag] -= int((b & mask2) << shift)
+					} else {
+						d[flipflag] += int((b & mask2) << shift)
+					}
+				}
+			case mantissa == 0:
+				{
+					// Skips when not using RLE
+					if nd.userunlength == 1 {
+						runlength = int(br.ReadBits(1))
+						if runlength == 1 {
+							runlength = int(br.ReadBits(2))
+							if runlength == 3 {
+								runlength = int(br.ReadBits(8))
+							}
+						}
+					}
+				}
+			}
+		} else {
+			runlength--
+		}
+		if nd.bps == 8 {
+			if br.CheckError() != nil {
+				break
+			}
+			// TODO write into the writer 8bit!
+			// *outdata++ = d[flipflag]
+		} else {
+			if br.CheckError() != nil {
+				break
+			}
+			// TODO write into the writer 16bit!
+			//write_little_endian_short(outdata, d[flipflag])
+			//outdata += 2
+		}
+		if nd.channels == 2 {
+			// changing the channel
+			flipflag = flipflag ^ 1
+		}
+	}
 }

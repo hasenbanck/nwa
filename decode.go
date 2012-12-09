@@ -8,7 +8,7 @@ import (
 )
 
 // Decode returns the dencoded sound as a slice in WAVE format.
-func DecodeAsWav(r io.ReadSeeker) (io.Reader, error) {
+func DecodeAsWav(r io.Reader) (io.Reader, error) {
 	nwadata, err := NewNwaData(r)
 	if err != nil {
 		return nil, err
@@ -23,17 +23,10 @@ func DecodeAsWav(r io.ReadSeeker) (io.Reader, error) {
 	var ret int64 = -1
 	data := new(bytes.Buffer)
 	for ret != 0 {
-		ret = nwadata.Decode(data, 0)
+		ret = nwadata.Decode(data)
 		if ret == -1 {
 			break
 		}
 	}
 	return data, nil
-}
-
-// DecoeKoeAsWav returns the decoded sound at the given offset/length
-// from a KOE file as a slice in WAVE format.
-func DecodeKoeAsWav(r io.ReadSeeker, offset int, length int) ([]byte, error) {
-	// TODO: Could be NWA or VORBIS!
-	return nil, nil
 }
