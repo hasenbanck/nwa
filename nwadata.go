@@ -164,10 +164,10 @@ func (nd *NwaData) Decode(writer io.Writer) int64 {
 			nd.curblock++
 			return written
 		}
-		if nd.curblock < nd.blocks {
+		if nd.curblock <= nd.blocks {
 			nd.curblock++
 			ret, err := io.CopyN(nd.writer, nd.reader, (int64)(nd.blocksize*(nd.bps/8)))
-			if err != nil {
+			if err != nil && err != io.EOF {
 				return -1
 			}
 			return ret
