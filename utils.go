@@ -20,10 +20,6 @@ func newBitReader(in io.ByteReader) *bitReader {
 	return &br
 }
 
-func (br *bitReader) CheckError() error {
-	return br.err
-}
-
 func (br *bitReader) readAtMost(n uint) (read uint, bits uint) {
 	bits = uint(br.current)
 	bits = bits >> uint(br.bit_pos)
@@ -35,19 +31,15 @@ func (br *bitReader) readAtMost(n uint) (read uint, bits uint) {
 	br.bit_pos += read
 	if br.bit_pos == 8 {
 		br.bit_pos = 0
-		var err error
-		br.current, err = br.in.ReadByte()
-		if err != nil {
-			br.err = err
+		br.current, br.err = br.in.ReadByte()
+		if br.err != nil {
+			panic(br.err)
 		}
 	}
 	return
 }
 
 func (br *bitReader) ReadBits(n uint) uint {
-	if br.err != nil {
-		return 0
-	}
 	var bits uint
 	var pos uint = 0
 	for n > 0 {

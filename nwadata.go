@@ -73,7 +73,7 @@ func (nd *NwaData) ReadHeader() error {
 	nd.blocksize = int(blocksize)
 	nd.restsize = int(restsize)
 
-	// uncompressed wave
+	// Uncompressed wave
 	if nd.complevel == -1 {
 		nd.blocksize = 65536
 		nd.restsize = (nd.datasize % (nd.blocksize * (nd.bps / 8))) / (nd.bps / 8)
@@ -84,7 +84,7 @@ func (nd *NwaData) ReadHeader() error {
 		nd.blocks = nd.datasize/(nd.blocksize*(nd.bps/8)) + rest
 	}
 	if nd.blocks <= 0 || nd.blocks > 1000000 {
-		// There can't be a music file over 1 hr
+		// There can't be a file with over 1hr music
 		return fmt.Errorf("Blocks are too large: %d\n", nd.blocks)
 	}
 	if nd.complevel == -1 {
@@ -114,7 +114,7 @@ func (nd *NwaData) CheckHeader() error {
 		return fmt.Errorf("This library only supports 8 / 16bit data: data is %d bits\n", nd.bps)
 	}
 	if nd.complevel == -1 {
-		var byps int = nd.bps / 8 // bytes per sample
+		var byps int = nd.bps / 8 // Bytes per sample
 		if nd.datasize != nd.samplecount*byps {
 			return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nd.datasize, nd.samplecount, byps)
 		}
@@ -129,7 +129,7 @@ func (nd *NwaData) CheckHeader() error {
 	if nd.offsets[nd.blocks-1] >= nd.compdatasize {
 		return fmt.Errorf("The last offset overruns the file.\n")
 	}
-	var byps int = nd.bps / 8 // bytes per sample
+	var byps int = nd.bps / 8 // Bytes per sample
 	if nd.datasize != nd.samplecount*byps {
 		return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nd.datasize, nd.samplecount, byps)
 	}
@@ -148,12 +148,10 @@ func (nd *NwaData) BlockLength() (int, error) {
 	return nd.blocksize * (nd.bps / 8), nil
 }
 
-/*
-**data は BlockLength 以上の長さを持つこと
-** 返り値は作成したデータの長さ。終了時は 0。
-** エラー時は -1
- */
-func (nd *NwaData) Decode(writer io.Writer) int64 {
+// DecodeBlock decodes one block with each call. Returns the length of the written bytes.
+// If the value is -1 there has been an error and 0 signals that there are no blocks left
+// to decode.
+func (nd *NwaData) DecodeBlock(writer io.Writer) int64 {
 	nd.writer = writer
 
 	// Uncompressed wave data stream
@@ -189,7 +187,7 @@ func (nd *NwaData) Decode(writer io.Writer) int64 {
 		return written
 	}
 
-	// 今回読み込む／デコードするデータの大きさを得る
+	// Calculate the size of the decoded block
 	var curblocksize, curcompsize int
 	if nd.curblock != nd.blocks-1 {
 		curblocksize = nd.blocksize * (nd.bps / 8)
@@ -206,14 +204,14 @@ func (nd *NwaData) Decode(writer io.Writer) int64 {
 	nd.tmpdata.Reset()
 	io.CopyN(&nd.tmpdata, nd.reader, (int64)(curcompsize))
 
-	// Decode the block
-	nd.decodeBlock(curblocksize)
+	// Decode the compressed block
+	nd.decode(curblocksize)
 
 	nd.curblock++
 	return (int64)(curblocksize)
 }
 
-func (nd *NwaData) decodeBlock(outsize int) {
+func (nd *NwaData) decode(outsize int) {
 	d := [...]int{0, 0}
 	var flipflag, runlength int = 0, 0
 
@@ -316,7 +314,7 @@ func (nd *NwaData) decodeBlock(outsize int) {
 			binary.Write(nd.writer, binary.LittleEndian, int16(d[flipflag]))
 		}
 		if nd.channels == 2 {
-			// changing the channel
+			// Changing the channel
 			flipflag = flipflag ^ 1
 		}
 	}
