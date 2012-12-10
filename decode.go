@@ -24,7 +24,7 @@ func DecodeAsWav(r io.Reader) (io.Reader, error) {
 	var ret int64 = -1
 	data := new(bytes.Buffer)
 	for ret != 0 {
-		ret = nwadata.Decode(data)
+		ret = nwadata.DecodeBlock(data)
 		if ret == -1 {
 			return nil, errors.New("This shouldn't happen! Report me!")
 		}
