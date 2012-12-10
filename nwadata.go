@@ -91,19 +91,13 @@ func (nd *NwaData) ReadHeader() error {
 		return nil
 	}
 
-	// Read the offset indexes
+	// Read the offset index
 	nd.offsets = make([]int, nd.blocks)
-	buffer = new(bytes.Buffer)
-	offsetsize := int64(nd.blocks * 4)
-	if count, err := io.CopyN(buffer, nd.reader, offsetsize); count != offsetsize || err != nil {
-		if err == nil {
-			err = fmt.Errorf("Can't read the offset block. Read %X bytes", count)
-		}
-		return err
-	}
 	for i := 0; i < nd.blocks; i++ {
 		var tmp int32
-		binary.Read(buffer, binary.LittleEndian, &tmp)
+		if err := binary.Read(nd.reader, binary.LittleEndian, &tmp); err != nil {
+			return errors.New("Couldn't read the offset block")
+		}
 		nd.offsets[i] = int(tmp)
 	}
 	return nil
@@ -225,22 +219,22 @@ func (nd *NwaData) decodeBlock(outsize int) {
 
 	// Read the first data (with full accuracy)
 	if nd.bps == 8 {
-		var tmp int8
+		var tmp uint8
 		binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
 		d[0] = int(tmp)
 	} else { // bps == 16bit
-		var tmp int16
+		var tmp uint16
 		binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
 		d[0] = int(tmp)
 	}
 	// Stereo
 	if nd.channels == 2 {
 		if nd.bps == 8 {
-			var tmp int8
+			var tmp uint8
 			binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
 			d[1] = int(tmp)
 		} else { // bps == 16bit
-			var tmp int16
+			var tmp uint16
 			binary.Read(&nd.tmpdata, binary.LittleEndian, &tmp)
 			d[1] = int(tmp)
 		}
@@ -272,7 +266,7 @@ func (nd *NwaData) decodeBlock(outsize int) {
 						mask1 := uint(1 << (bits - 1))
 						mask2 := uint((1 << (bits - 1)) - 1)
 						b := br.ReadBits(bits)
-						if b&mask1 == 1 {
+						if b&mask1 != 0 {
 							d[flipflag] -= int((b & mask2) << shift)
 						} else {
 							d[flipflag] += int((b & mask2) << shift)
@@ -293,7 +287,7 @@ func (nd *NwaData) decodeBlock(outsize int) {
 					mask1 := uint(1 << (bits - 1))
 					mask2 := uint((1 << (bits - 1)) - 1)
 					b := br.ReadBits(bits)
-					if b&mask1 == 1 {
+					if b&mask1 != 0 {
 						d[flipflag] -= int((b & mask2) << shift)
 					} else {
 						d[flipflag] += int((b & mask2) << shift)
@@ -317,7 +311,7 @@ func (nd *NwaData) decodeBlock(outsize int) {
 			runlength--
 		}
 		if nd.bps == 8 {
-			binary.Write(nd.writer, binary.LittleEndian, int8(d[flipflag]))
+			binary.Write(nd.writer, binary.LittleEndian, uint8(d[flipflag]))
 		} else {
 			binary.Write(nd.writer, binary.LittleEndian, int16(d[flipflag]))
 		}
