@@ -11,7 +11,7 @@ go get github.com/go-rlvm/nwa
 
 ## LICENSE
 This library is licensed under the GNU General Public License version 3
-(or later). You can find a copy of the license in the LICENSE.txt.
+(or later). You can find a copy of the license in the GPL.txt.
 
 If you want to use this library but can't because of the license, feel
 free to contact me/us. I'm pretty sure we can find a way out of that problem.
