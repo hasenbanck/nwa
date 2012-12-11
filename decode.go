@@ -8,9 +8,9 @@ import (
 	"io"
 )
 
-// Decode returns the dencoded sound as a slice in WAVE format.
+// Decode returns the decoded sound in WAVE format as a io.Reader.
 func DecodeAsWav(r io.Reader) (io.Reader, error) {
-	nwadata, err := NewNwaData(r)
+	nwadata, err := newNwaData(r)
 	if err != nil {
 		return nil, err
 	}

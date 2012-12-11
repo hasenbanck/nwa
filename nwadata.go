@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-type NwaData struct {
+type nwaData struct {
 	reader       io.Reader // Reader to read the NWA data from
 	channels     int       // channels
 	bps          int       // bits per sample
@@ -28,14 +28,14 @@ type NwaData struct {
 	writer  io.Writer
 }
 
-func NewNwaData(r io.Reader) (*NwaData, error) {
+func newNwaData(r io.Reader) (*nwaData, error) {
 	if r == nil {
 		return nil, errors.New("Reader is nil.")
 	}
-	return &NwaData{reader: r}, nil
+	return &nwaData{reader: r}, nil
 }
 
-func (nd *NwaData) ReadHeader() error {
+func (nd *nwaData) ReadHeader() error {
 	nd.curblock = -1
 	buffer := new(bytes.Buffer)
 	if count, err := io.CopyN(buffer, nd.reader, 0x2c); count != 0x2c || err != nil {
@@ -103,7 +103,7 @@ func (nd *NwaData) ReadHeader() error {
 	return nil
 }
 
-func (nd *NwaData) CheckHeader() error {
+func (nd *nwaData) CheckHeader() error {
 	if nd.complevel != -1 && nd.offsets == nil {
 		return errors.New("No offsets set even thought they are needed")
 	}
@@ -139,7 +139,7 @@ func (nd *NwaData) CheckHeader() error {
 	return nil
 }
 
-func (nd *NwaData) BlockLength() (int, error) {
+func (nd *nwaData) BlockLength() (int, error) {
 	if nd.complevel != -1 {
 		if nd.offsets == nil {
 			return 0, errors.New("BlockLength could not be calculcated: No offsets set!")
@@ -151,7 +151,7 @@ func (nd *NwaData) BlockLength() (int, error) {
 // DecodeBlock decodes one block with each call. Returns the length of the written bytes.
 // If the value is -1 there has been an error and 0 signals that there are no blocks left
 // to decode.
-func (nd *NwaData) DecodeBlock(writer io.Writer) int64 {
+func (nd *nwaData) DecodeBlock(writer io.Writer) int64 {
 	nd.writer = writer
 
 	// Uncompressed wave data stream
@@ -211,7 +211,10 @@ func (nd *NwaData) DecodeBlock(writer io.Writer) int64 {
 	return (int64)(curblocksize)
 }
 
-func (nd *NwaData) decode(outsize int) {
+// If you wanted to gain more speed, this would be the place to start. You
+// could try to use an array or slice (not a ByteReader), so that you could
+// speed up the bitReader.ReadBits() method.
+func (nd *nwaData) decode(outsize int) {
 	d := [...]int{0, 0}
 	var flipflag, runlength int = 0, 0
 
