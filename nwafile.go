@@ -88,7 +88,7 @@ func (nf *NwaFile) readHeader() error {
 	// Uncompressed wave
 	if nf.complevel == -1 {
 		nf.blocksize = 65536
-		nf.restsize = (nf.Datasize % (nf.blocksize * (nf.Bps / 8))) / (nf.Bps / 8)
+		nf.restsize = (nf.datasize % (nf.blocksize * (nf.Bps / 8))) / (nf.Bps / 8)
 		var rest int = 0
 		if nf.restsize > 0 {
 			rest = 1
