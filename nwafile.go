@@ -12,16 +12,17 @@ type NwaFile struct {
 	Channels int // channels
 	Bps      int // bits per sample
 	Freq     int // samples per second
-	Datasize int // all data size
 
 	reader       io.Reader // Reader to read the NWA file from
 	complevel    int       // compression level
 	userunlength int       // run length encoding
 	blocks       int       // block count
+	datasize     int       // all data size
 	compdatasize int       // compressed data size
 	samplecount  int       // all samples
 	blocksize    int       // samples per block
 	restsize     int       // samples of the last block
+	blocklength  int
 	curblock     int
 	offsets      []int
 
@@ -36,18 +37,18 @@ func NewNwaFile(r io.Reader) (*NwaFile, error) {
 
 	nf := &NwaFile{reader: r}
 
-	if err := nf.readHeader(); err != nil {
+	if err := nf.ReadHeader(); err != nil {
 		return nil, err
 	}
 
-	if err := nf.checkHeader(); err != nil {
+	if err := nf.CheckHeader(); err != nil {
 		return nil, err
 	}
 
 	return nf, nil
 }
 
-func (nf *NwaFile) readHeader() error {
+func (nf *NwaFile) ReadHeader() error {
 	nf.curblock = -1
 	buffer := new(bytes.Buffer)
 	if count, err := io.CopyN(buffer, nf.reader, 0x2c); count != 0x2c || err != nil {
@@ -76,10 +77,10 @@ func (nf *NwaFile) readHeader() error {
 	nf.Channels = int(channels)
 	nf.Bps = int(bps)
 	nf.Freq = int(freq)
-	nf.Datasize = int(datasize)
 	nf.complevel = int(complevel)
 	nf.userunlength = int(userunlength)
 	nf.blocks = int(blocks)
+	nf.datasize = int(datasize)
 	nf.compdatasize = int(compdatasize)
 	nf.samplecount = int(samplecount)
 	nf.blocksize = int(blocksize)
@@ -93,7 +94,7 @@ func (nf *NwaFile) readHeader() error {
 		if nf.restsize > 0 {
 			rest = 1
 		}
-		nf.blocks = nf.Datasize/(nf.blocksize*(nf.Bps/8)) + rest
+		nf.blocks = nf.datasize/(nf.blocksize*(nf.Bps/8)) + rest
 	}
 	if nf.blocks <= 0 || nf.blocks > 1000000 {
 		// There can't be a file with over 1hr music
@@ -113,10 +114,12 @@ func (nf *NwaFile) readHeader() error {
 		nf.offsets[i] = int(tmp)
 	}
 
+	nf.blocklength = nf.blocksize * (nf.Bps / 8)
+
 	return nil
 }
 
-func (nf *NwaFile) checkHeader() error {
+func (nf *NwaFile) CheckHeader() error {
 	if nf.complevel != -1 && nf.offsets == nil {
 		return errors.New("No offsets set even thought they are needed")
 	}
@@ -128,8 +131,8 @@ func (nf *NwaFile) checkHeader() error {
 	}
 	if nf.complevel == -1 {
 		var byps int = nf.Bps / 8 // Bytes per sample
-		if nf.Datasize != nf.samplecount*byps {
-			return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nf.Datasize, nf.samplecount, byps)
+		if nf.datasize != nf.samplecount*byps {
+			return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nf.datasize, nf.samplecount, byps)
 		}
 		if nf.samplecount != (nf.blocks-1)*nf.blocksize+nf.restsize {
 			return fmt.Errorf("Total sample count is invalid: samplecount %d != %d*%d+%d(block*blocksize+lastblocksize)\n", nf.samplecount, nf.blocks-1, nf.blocksize, nf.restsize)
@@ -143,8 +146,8 @@ func (nf *NwaFile) checkHeader() error {
 		return fmt.Errorf("The last offset overruns the file.\n")
 	}
 	var byps int = nf.Bps / 8 // Bytes per sample
-	if nf.Datasize != nf.samplecount*byps {
-		return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nf.Datasize, nf.samplecount, byps)
+	if nf.datasize != nf.samplecount*byps {
+		return fmt.Errorf("Invalid datasize: datasize %d != samplecount %d * samplesize %d\n", nf.datasize, nf.samplecount, byps)
 	}
 	if nf.samplecount != (nf.blocks-1)*nf.blocksize+nf.restsize {
 		return fmt.Errorf("Total sample count is invalid: samplecount %d != %d*%d+%d(block*blocksize+lastblocksize)\n", nf.samplecount, nf.blocks-1, nf.blocksize, nf.restsize)
@@ -163,7 +166,7 @@ func (nf *NwaFile) Read(p []byte) (n int, err error) {
 		if nf.curblock == -1 {
 			// If it's the first block we have to write the wave header
 			nf.curblock++
-			written, err := io.Copy(nf.outdata, makeWavHeader(nf.Datasize, nf.Channels, nf.Bps, nf.Freq))
+			written, err := io.Copy(nf.outdata, makeWavHeader(nf.datasize, nf.Channels, nf.Bps, nf.Freq))
 			return int(written), err
 		}
 		if nf.curblock <= nf.blocks {
@@ -184,7 +187,7 @@ func (nf *NwaFile) Read(p []byte) (n int, err error) {
 	if nf.curblock == -1 {
 		// If it's the first block we have to write the wave header
 		nf.curblock++
-		written, err := io.Copy(nf.outdata, makeWavHeader(nf.Datasize, nf.Channels, nf.Bps, nf.Freq))
+		written, err := io.Copy(nf.outdata, makeWavHeader(nf.datasize, nf.Channels, nf.Bps, nf.Freq))
 		return int(written), err
 	}
 
