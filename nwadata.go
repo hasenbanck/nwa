@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"unsafe"
 )
 
 type nwaData struct {
@@ -139,15 +140,6 @@ func (nd *nwaData) CheckHeader() error {
 	return nil
 }
 
-func (nd *nwaData) BlockLength() (int, error) {
-	if nd.complevel != -1 {
-		if nd.offsets == nil {
-			return 0, errors.New("BlockLength could not be calculcated: No offsets set!")
-		}
-	}
-	return nd.blocksize * (nd.bps / 8), nil
-}
-
 // DecodeBlock decodes one block with each call. Returns the length of the written bytes.
 // If the value is -1 there has been an error and 0 signals that there are no blocks left
 // to decode.
@@ -215,8 +207,8 @@ func (nd *nwaData) DecodeBlock(writer io.Writer) int64 {
 // could try to use an array or slice (not a ByteReader), so that you could
 // speed up the bitReader.ReadBits() method.
 func (nd *nwaData) decode(outsize int) {
-	d := [...]int{0, 0}
-	var flipflag, runlength int = 0, 0
+	var d [2]int
+	var flipflag, runlength int
 
 	// Read the first data (with full accuracy)
 	if nd.bps == 8 {
@@ -241,19 +233,21 @@ func (nd *nwaData) decode(outsize int) {
 		}
 	}
 
-	br := newBitReader(&nd.tmpdata)
+	ptr := uintptr(unsafe.Pointer(&nd.tmpdata.Bytes()[0]))
+	var shiftBits uint
+
 	dsize := outsize / (nd.bps / 8)
 	for i := 0; i < dsize; i++ {
 		// If we are not in a copy loop (RLE), read in the data
 		if runlength == 0 {
-			exponent := br.ReadBits(3)
+			exponent := getBits(&ptr, &shiftBits, 3)
 			// Branching according to the mantissa: 0, 1-6, 7
 			switch {
 			case exponent == 7:
 				{
 					// 7: big exponent
 					// In case we are using RLE (complevel==5) this is disabled
-					if br.ReadBits(1) == 1 {
+					if getBits(&ptr, &shiftBits, 1) == 1 {
 						d[flipflag] = 0
 					} else {
 						var bits, shift uint
@@ -266,7 +260,7 @@ func (nd *nwaData) decode(outsize int) {
 						}
 						mask1 := uint(1 << (bits - 1))
 						mask2 := uint((1 << (bits - 1)) - 1)
-						b := br.ReadBits(bits)
+						b := getBits(&ptr, &shiftBits, bits)
 						if b&mask1 != 0 {
 							d[flipflag] -= int((b & mask2) << shift)
 						} else {
@@ -287,7 +281,7 @@ func (nd *nwaData) decode(outsize int) {
 					}
 					mask1 := uint(1 << (bits - 1))
 					mask2 := uint((1 << (bits - 1)) - 1)
-					b := br.ReadBits(bits)
+					b := getBits(&ptr, &shiftBits, bits)
 					if b&mask1 != 0 {
 						d[flipflag] -= int((b & mask2) << shift)
 					} else {
@@ -298,11 +292,11 @@ func (nd *nwaData) decode(outsize int) {
 				{
 					// Skips when not using RLE
 					if nd.userunlength == 1 {
-						runlength = int(br.ReadBits(1))
+						runlength = int(getBits(&ptr, &shiftBits, 1))
 						if runlength == 1 {
-							runlength = int(br.ReadBits(2))
+							runlength = int(getBits(&ptr, &shiftBits, 2))
 							if runlength == 3 {
-								runlength = int(br.ReadBits(8))
+								runlength = int(getBits(&ptr, &shiftBits, 8))
 							}
 						}
 					}
