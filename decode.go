@@ -3,31 +3,14 @@
 package nwa
 
 import (
-	"bytes"
-	"errors"
 	"io"
 )
 
-// Decode returns the decoded sound in WAVE format as a io.Reader.
+// Decode returns the decoded sound in WAVE format as an io.Reader.
 func DecodeAsWav(r io.Reader) (io.Reader, error) {
-	nwadata, err := newNwaData(r)
+	nwadata, err := NewNwaFile(r)
 	if err != nil {
 		return nil, err
 	}
-	if err = nwadata.ReadHeader(); err != nil {
-		return nil, err
-	}
-	if err = nwadata.CheckHeader(); err != nil {
-		return nil, err
-	}
-
-	var ret int64 = -1
-	data := new(bytes.Buffer)
-	for ret != 0 {
-		ret = nwadata.DecodeBlock(data)
-		if ret == -1 {
-			return nil, errors.New("This shouldn't happen! Report me!")
-		}
-	}
-	return data, nil
+	return nwadata, nil
 }
