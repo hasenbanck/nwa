@@ -7,7 +7,7 @@ import (
 	"unsafe"
 )
 
-// Only works for little endian
+// Only works for little endian data
 func getBits(data *uintptr, shift *uint, bits uint) uint {
 	if *shift > 8 {
 		*data++
