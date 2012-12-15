@@ -44,12 +44,12 @@ func NewNwaFile(r io.Reader) (*NwaFile, error) {
 		return nil, err
 	}
 
-	var ret int64 = -1
+	ret, err := nf.decodeBlock()
 	for ret != 0 {
-		ret = nf.decodeBlock()
-		if ret == -1 {
-			return nil, errors.New("This shouldn't happen! Report me!")
+		if err != nil {
+			return nil, err
 		}
+		ret, err = nf.decodeBlock()
 	}
 
 	return nf, nil
@@ -164,43 +164,41 @@ func (nf *NwaFile) checkHeader() error {
 	return nil
 }
 
-// decodeBlock decodes one block with each call. Returns the length of the written bytes.
-// If the value is -1 there has been an error and 0 signals that there are no blocks left
-// to decode.
-func (nf *NwaFile) decodeBlock() int64 {
-	// TODO: Rewrite my signature to int, err
-
+// decodeBlock decodes one block with each call. Returns the length of the
+// written bytes and an error if there was one.
+func (nf *NwaFile) decodeBlock() (int64, error) {
 	// Uncompressed wave data stream
 	if nf.complevel == -1 {
 		if nf.curblock == -1 {
 			// If it's the first block we have to write the wave header
 			written, _ := io.Copy(&nf.outdata, makeWavHeader(nf.datasize, nf.Channels, nf.Bps, nf.Freq))
 			nf.curblock++
-			return written
+			return written, nil
 		}
 		if nf.curblock <= nf.blocks {
 			nf.curblock++
 			ret, err := io.CopyN(&nf.outdata, nf.reader, (int64)(nf.blocksize*(nf.Bps/8)))
 			if err != nil && err != io.EOF {
-				return -1
+				return -1, err
 			}
-			return ret
+			return ret, nil
 		}
-		return -1
+		return -1, errors.New("This shouldn't happen! Please report me")
 	}
 
 	// Compressed (NWA) wave data stream
 	if nf.offsets == nil {
-		return -1
+		return -1, errors.New("Offsets weren't set. Aborting")
 	}
 	if nf.blocks == nf.curblock {
-		return 0
+		// We are finished
+		return 0, nil
 	}
 	if nf.curblock == -1 {
 		// If it's the first block we have to write the wave header
 		written, _ := io.Copy(&nf.outdata, makeWavHeader(nf.datasize, nf.Channels, nf.Bps, nf.Freq))
 		nf.curblock++
-		return written
+		return written, nil
 	}
 
 	// Calculate the size of the decoded block
@@ -209,7 +207,7 @@ func (nf *NwaFile) decodeBlock() int64 {
 		curblocksize = nf.blocksize * (nf.Bps / 8)
 		curcompsize = nf.offsets[nf.curblock+1] - nf.offsets[nf.curblock]
 		if curblocksize >= nf.blocksize*(nf.Bps/8)*2 {
-			return -1
+			return -1, errors.New("Current block exceeds the excepted count.")
 		} // Fatal error
 	} else {
 		curblocksize = nf.restsize * (nf.Bps / 8)
@@ -224,7 +222,7 @@ func (nf *NwaFile) decodeBlock() int64 {
 	nf.decode(curblocksize)
 
 	nf.curblock++
-	return (int64)(curblocksize)
+	return (int64)(curblocksize), nil
 }
 
 func (nf *NwaFile) decode(outsize int) {
