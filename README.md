@@ -7,7 +7,7 @@ This library was written in GO 1.0.3 and doesn't need any further
 libraries.
 
 ## INSTALLATION
-go get github.com/go-rlvm/nwa
+go get github.com/hasenbanck/nwa
 
 ## LICENSE
 This library is licensed under the GNU General Public License version 3
