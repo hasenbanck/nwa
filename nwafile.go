@@ -148,7 +148,7 @@ func (nf *NwaFile) checkHeader() error {
 		}
 		return nil
 	}
-	if nf.complevel < 0 || nf.complevel > 5 {
+	if nf.complevel < -1 || nf.complevel > 5 {
 		return fmt.Errorf("This library supports only compression level from -1 to 5: the compression level of the data is %d\n", nf.complevel)
 	}
 	if nf.offsets[nf.blocks-1] >= nf.compdatasize {
